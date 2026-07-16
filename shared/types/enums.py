@@ -80,3 +80,48 @@ class PaymentMethod(StrEnum):
     VOUCHER = "voucher"
     LAY_BY_DEPOSIT = "lay_by_deposit"
     CREDIT_NOTE = "credit_note"
+
+
+class WarehouseType(StrEnum):
+    """Warehouse classification."""
+
+    MAIN = "main"
+    RETAIL = "retail"
+    TRANSIT = "transit"
+    RETURNS = "returns"
+    DAMAGED = "damaged"
+    VIRTUAL = "virtual"
+
+
+class TaxCategory(StrEnum):
+    """Tax category classification."""
+
+    STANDARD = "standard"
+    REDUCED = "reduced"
+    ZERO = "zero"
+    EXEMPT = "exempt"
+
+
+class TaxType(StrEnum):
+    """Tax type classification."""
+
+    VAT = "VAT"
+    SALES_TAX = "SALES_TAX"
+    INCOME_TAX = "INCOME_TAX"
+
+
+class FiscalYearStatus(StrEnum):
+    """Fiscal year status."""
+
+    OPEN = "open"
+    CLOSED = "closed"
+    ARCHIVED = "archived"
+
+
+class NumberSequenceResetPolicy(StrEnum):
+    """Number sequence reset behavior."""
+
+    NEVER = "never"
+    YEARLY = "yearly"
+    MONTHLY = "monthly"
+    DAILY = "daily"
