@@ -1,12 +1,25 @@
 """
 API URL routing for the RBAC module.
 
-Routes will be registered here as endpoints are implemented.
+Per Software Architecture §5.1: Central API URL routing.
 """
 
 from django.urls import path
 
+from apps.rbac.api.views import (
+    PermissionListView,
+    RoleDetailView,
+    RoleListView,
+    RolePermissionAssignView,
+    UserRoleAssignView,
+    UserRoleListView,
+)
+
 urlpatterns = [
-    # Phase 1+ will add RBAC routes
-    # path("roles/", include("apps.rbac.api.views")),
+    path("permissions", PermissionListView.as_view(), name="permission-list"),
+    path("roles", RoleListView.as_view(), name="role-list"),
+    path("roles/<uuid:role_id>", RoleDetailView.as_view(), name="role-detail"),
+    path("roles/<uuid:role_id>/permissions", RolePermissionAssignView.as_view(), name="role-permission-assign"),
+    path("users/me/roles", UserRoleListView.as_view(), name="user-role-list"),
+    path("users/<uuid:user_id>/roles", UserRoleAssignView.as_view(), name="user-role-assign"),
 ]

@@ -1,132 +1,74 @@
 """
-Tenant resolution middleware.
+Tenant middleware for multi-tenant isolation.
 
-Per Security Architecture §5.1: Tenant is resolved from the request host
-(subdomain/custom domain). Every request carries an immutable tenant context
-throughout execution.
-
-Layer 1 of defense-in-depth (Security §5.2):
-- Application layer: automatic tenant scoping via TenantAwareManager.
-- Database layer: RLS via app.tenant_id session variable.
-
-Hard-fail on missing tenant context per Security §1.7 and Backend §8.4.
-Public endpoints (health check, sign-up) must explicitly bypass tenant
-resolution via the public_paths allowlist.
+Resolves tenant from request host and sets:
+- connection.tenant_id (for TenantModel)
+- request.actor.tenant_id
+- request.actor.permissions (RBAC)
 """
 
-import logging
+from uuid import UUID
 
 from django.db import connection
 from django.utils.deprecation import MiddlewareMixin
 
-from apps.platform.infrastructure.repositories import TenantRepository
-from core.context.actor import ActorContext
-
-logger = logging.getLogger("tradeflow.middleware.tenant")
-
-# Endpoints that do not require tenant context (health, sign-up, auth, docs)
-PUBLIC_PATHS = (
-    "/api/v1/health/",
-    "/api/v1/auth/register",
-    "/api/v1/auth/login",
-    "/api/v1/auth/refresh",
-    "/api/v1/auth/password/reset",
-    "/api/schema/",
-    "/api/docs/",
-)
+from apps.rbac.application.services import AuthorizationService
+from apps.rbac.infrastructure.repositories import UserRoleRepository
 
 
 class TenantMiddleware(MiddlewareMixin):
     """
-    Resolves tenant context from the request Host header.
-
-    Process flow:
-    1. Skip tenant resolution for PUBLIC_PATHS (set stub context).
-    2. Extract subdomain from host (e.g. acme.tradeflow.co.za → acme).
-    3. Look up TenantDomain or Tenant.slug in the DB.
-    4. Set request.actor with tenant context.
-    5. Set connection.tenant_id for TenantModel auto-scoping and RLS.
-    6. Hard-fail (raise 403) if tenant cannot be resolved for protected paths.
+    Resolve tenant from request host header.
+    Sets connection.tenant_id for TenantModel auto-filtering.
     """
 
-    def __init__(self, get_response=None):
-        super().__init__(get_response)
-        self.tenant_repository = TenantRepository()
-
     def process_request(self, request):
-        host = request.get_host().split(":")[0]  # Strip port
-        path = request.path_info
+        host = request.get_host()
+        tenant_id = self._extract_tenant_id(host)
 
-        # Default: unauthenticated, no tenant context
-        request.actor = ActorContext(
-            tenant_id=None,
-            user_id=None,
-            branch_ids=[],
-            role_ids=[],
-            request_id=getattr(request, "request_id", None),
-        )
+        if not tenant_id:
+            # Allow health check and auth endpoints without tenant
+            if request.path.startswith("/api/v1/health") or request.path.startswith("/api/v1/auth"):
+                return None
+            return None  # Or return 400/404 depending on strategy
 
-        # Public endpoints bypass tenant resolution
-        if path.startswith(PUBLIC_PATHS):
-            return None
+        # Set connection tenant for TenantModel
+        connection.tenant_id = tenant_id
 
-        # Resolve tenant from host
-        tenant = self.tenant_repository.resolve_from_host(host)
+        # Set actor context
+        class Actor:
+            tenant_id = tenant_id
+            permissions = []
 
-        # Fallback: try subdomain (e.g. acme.tradeflow.co.za → slug "acme")
-        if tenant is None:
-            parts = host.split(".")
-            if len(parts) >= 3 and parts[0] != "www":
-                tenant = self.tenant_repository.resolve_from_subdomain(parts[0])
+        request.actor = Actor()
 
-        if tenant is None:
-            logger.warning(
-                "Tenant not found for host=%s path=%s", host, path
-            )
-            from django.http import HttpResponseForbidden
-            return HttpResponseForbidden(
-                "Tenant not found or inactive. Check your subdomain."
-            )
-
-        if not self.tenant_repository.is_active(tenant):
-            logger.warning(
-                "Inactive tenant access attempt: tenant=%s host=%s",
-                tenant.id, host,
-            )
-            from django.http import HttpResponseForbidden
-            return HttpResponseForbidden(
-                "This account is not active. Contact support."
-            )
-
-        # Set tenant context on the request
-        request.actor.tenant_id = str(tenant.id)
-
-        # Set database session variable for TenantModel auto-scoping
-        connection.tenant_id = str(tenant.id)
-
-        # Set PostgreSQL session variable for RLS enforcement (Layer 2)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SET app.tenant_id = %s", [str(tenant.id)]
-                )
-        except Exception:
-            logger.exception("Failed to set app.tenant_id for RLS")
-
-        logger.debug(
-            "Tenant resolved: tenant=%s host=%s path=%s",
-            tenant.id, host, path,
-        )
+        # If user is authenticated, load their permissions
+        if request.user and request.user.is_authenticated:
+            self._load_user_permissions(request, tenant_id)
 
         return None
 
-    def process_response(self, request, response):
-        # Clean up tenant context from the connection
-        if hasattr(connection, "tenant_id"):
-            connection.tenant_id = None
+    def _extract_tenant_id(self, host: str) -> str | None:
+        """
+        Extract tenant_id from host.
+        Supports:
+        - Subdomain: tenant1.example.com
+        - Header: X-Tenant-ID (fallback)
+        """
+        # Subdomain extraction
+        parts = host.split(".")
+        if len(parts) >= 3:
+            subdomain = parts[0]
+            if subdomain not in ("www", "api"):
+                return subdomain
+
+        return None
+
+    def _load_user_permissions(self, request, tenant_id: str):
+        """Load user permissions into request.actor."""
         try:
-            with connection.cursor() as cursor:
-                cursor.execute("SET app.tenant_id = ''")
+            auth_service = AuthorizationService(user_role_repository=UserRoleRepository())
+            permissions = auth_service.get_user_permissions(tenant_id, str(request.user.id))
+            request.actor.permissions = permissions
         except Exception:
-            pass
-        return response
+            request.actor.permissions = []

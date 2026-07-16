@@ -1,60 +1,83 @@
 """
 Domain entities for the RBAC module.
 
-Per Security Architecture: Roles, permissions, and access policies.
+Per amendment: Permissions are global system records. Roles are tenant-scoped.
+Supports wildcard permissions (e.g., inventory.*, inventory.products.*).
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Optional
 
 from shared.ids.uuid import new_id_str
+from shared.time.helpers import now
+
+
+@dataclass
+class Permission:
+    """
+    Global permission definition (not tenant-scoped).
+    Permissions are system-wide and shared across all tenants.
+    """
+
+    id: str = field(default_factory=new_id_str)
+    name: str = ""  # e.g., "inventory.products.edit"
+    resource: str = ""  # e.g., "inventory.products"
+    action: str = ""  # e.g., "edit"
+    description: str = ""
+    is_wildcard: bool = False
+    is_system: bool = False
+    created_at: datetime = field(default_factory=now)
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.resource}.{self.action}"
 
 
 @dataclass
 class Role:
     """
-    Role entity representing a collection of permissions.
-
-    Roles are assigned to users within a tenant scope.
+    Tenant-scoped role.
+    Roles belong to a specific tenant and define a set of permissions.
     """
 
     id: str = field(default_factory=new_id_str)
     tenant_id: str = ""
     name: str = ""
     description: str = ""
-    permissions: List[str] = field(default_factory=list)
-    is_system_role: bool = False  # System roles cannot be deleted
-    created_at: str = ""
-    updated_at: str = ""
+    is_system: bool = False
+    is_active: bool = True
+    permission_version: int = 0  # For cache invalidation
+    created_at: datetime = field(default_factory=now)
+    updated_at: datetime = field(default_factory=now)
 
 
 @dataclass
-class Permission:
+class RolePermission:
     """
-    Permission entity representing a specific action on a resource.
-
-    Format: "module:action" (e.g., "sales:create", "payroll:approve")
+    Many-to-many relationship between Role and Permission.
     """
 
     id: str = field(default_factory=new_id_str)
-    tenant_id: str = ""
-    codename: str = ""  # Unique permission identifier
-    name: str = ""  # Human-readable name
-    module: str = ""  # Module this permission belongs to
-    action: str = ""  # Action allowed (create, read, update, delete, approve)
-    description: str = ""
-
-
-@dataclass
-class BranchAccessPolicy:
-    """
-    Branch access policy for a role.
-
-    Defines which branches a role can access.
-    """
-
-    id: str = field(default_factory=new_id_str)
-    tenant_id: str = ""
     role_id: str = ""
-    branch_ids: List[str] = field(default_factory=list)
-    access_type: str = "allowed"  # allowed or denied
+    permission_id: str = ""
+    created_at: datetime = field(default_factory=now)
+
+
+@dataclass
+class UserRole:
+    """
+    User-Role assignment with optional branch scope.
+
+    Branch scoping:
+    - branch_id = null: user has role for all branches (Owner/Admin)
+    - branch_id = specific: user has role only for that branch
+    """
+
+    id: str = field(default_factory=new_id_str)
+    user_id: str = ""
+    role_id: str = ""
+    tenant_id: str = ""
+    branch_id: Optional[str] = None  # None = all branches
+    assigned_by: str = ""  # User ID who assigned this role
+    assigned_at: datetime = field(default_factory=now)
