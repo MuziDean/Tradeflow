@@ -1,0 +1,13 @@
+"""
+TradeFlow IAM app configuration.
+
+Per ADR-004: IAM module handles authentication and authorization.
+"""
+
+from django.apps import AppConfig
+
+
+class IAMConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.iam"
+    verbose_name = "Identity & Access Management"
