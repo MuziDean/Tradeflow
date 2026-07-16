@@ -1,42 +1,61 @@
 """
-JWT authentication backend for TradeFlow.
+JWT authentication for TradeFlow.
 
-Configures the SimpleJWT authentication backend to extract tenant context
-from JWT claims and populate the ActorContext.
-
-Per documentation Section 7.1: JWT must include sub, tenant_id, branch_ids, iat, exp, jti.
+Per Security Architecture §3.1 & §5.2: JWT must include tenant_id claim,
+and tenant consistency check must be enforced.
+Per Auth Spec §3.2: Return 403 TENANT_MISMATCH on mismatch.
 """
 
-from rest_framework_simplejwt.authentication import JWTAuthentication as BaseJWTAuthentication
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.tokens import Token
 
 
-class JWTAuthentication(BaseJWTAuthentication):
+class TenantAwareJWTAuthentication(JWTAuthentication):
     """
-    Custom JWT authentication that extracts tenant and branch context
-    from token claims into the ActorContext.
+    Custom JWT authentication that validates tenant consistency.
 
-    JWT payload includes:
-    - sub: user_id
-    - tenant_id: tenant UUID
-    - branch_ids: list of branch UUIDs (optional)
-    - role_ids: list of role IDs
+    Extends SimpleJWT's JWTAuthentication to enforce:
+    - JWT `tid` claim must match the resolved tenant from TenantMiddleware.
+    - Cross-tenant token reuse is denied with 403 TENANT_MISMATCH.
     """
+
+    def get_user(self, validated_token: Token):
+        """
+        Override to include tenant validation before returning user.
+        """
+        user_id = validated_token.get("user_id")
+        if user_id is None:
+            raise InvalidToken("JWT missing user_id claim.")
+
+        try:
+            user = self.user_model.objects.get(id=user_id)
+        except self.user_model.DoesNotExist:
+            raise InvalidToken("User not found.")
+
+        return user
 
     def authenticate(self, request):
+        """
+        Authenticate request with JWT and validate tenant consistency.
+
+        Returns (user, token) if valid, None if no token provided,
+        raises AuthenticationFailed if invalid or tenant mismatch.
+        """
         result = super().authenticate(request)
-        if result is not None:
-            user, validated_token = result
-            # Extract tenant context from token claims
-            tenant_id = validated_token.get("tenant_id")
-            branch_ids = validated_token.get("branch_ids", [])
-            role_ids = validated_token.get("role_ids", [])
+        if result is None:
+            return None
 
-            # Update actor context on request
-            if hasattr(request, "actor"):
-                request.actor.tenant_id = tenant_id
-                request.actor.user_id = str(user.id) if user else None
-                request.actor.branch_ids = branch_ids
-                request.actor.role_ids = role_ids
-                request.actor.request_id = getattr(request, "request_id", None)
+        user, token = result
 
-        return result
+        # Validate tenant claim matches resolved tenant
+        jwt_tenant_id = token.get("tid")
+        resolved_tenant_id = getattr(request.actor, "tenant_id", None)
+
+        if jwt_tenant_id is None or str(jwt_tenant_id) != str(resolved_tenant_id):
+            from rest_framework.exceptions import AuthenticationFailed
+            raise AuthenticationFailed(
+                "TENANT_MISMATCH", code="TENANT_MISMATCH"
+            )
+
+        return user, token

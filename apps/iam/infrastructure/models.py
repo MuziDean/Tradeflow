@@ -1,83 +1,128 @@
 """
 Django models for the IAM module.
 
-Per Security Architecture: Users, sessions, and password reset tokens.
+Per Database Design Section 4.2: user_account, security_event, password_reset_token.
+Per Security Architecture: Users are tenant-scoped, passwords hashed, lockout enforced.
+Per Backend Engineering Standards §2.4: models in infrastructure/ layer.
 """
 
+from uuid import uuid4
+
+from django.contrib.auth.hashers import make_password
 from django.db import models
 
-from shared.ids.uuid import new_id_str
 from infrastructure.db.base_model import TenantModel
 
 
-class User(TenantModel):
+class UserAccount(TenantModel):
     """
-    Django user model for TradeFlow.
+    Tenant-scoped user account model.
 
-    Extends TenantModel with authentication-specific fields.
+    Per DB Design §4.2: user_account (tenant-scoped; unique email per tenant).
+    Per Security §3.1: User identities are tenant-scoped.
+    Per Security §6.5: Passwords hashed via bcrypt/Argon2id.
+    Per Security §3.8: Account lockout and progressive delays.
     """
 
-    email = models.EmailField(unique=True)
-    phone_number = models.CharField(max_length=20, blank=True)
-    first_name = models.CharField(max_length=100, blank=True)
-    last_name = models.CharField(max_length=100, blank=True)
-    status = models.CharField(max_length=20, default="active")
+    MAX_FAILED_ATTEMPTS = 5
+    LOCKOUT_MINUTES = 30
+
+    email = models.EmailField(db_index=True)
+    password_hash = models.CharField(max_length=255)
+    display_name = models.CharField(max_length=150, blank=True)
+    status = models.CharField(
+        max_length=20,
+        default="active",
+        choices=[
+            ("active", "Active"),
+            ("inactive", "Inactive"),
+            ("suspended", "Suspended"),
+            ("locked", "Locked"),
+        ],
+    )
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     failed_login_attempts = models.IntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
-    last_login = models.DateTimeField(null=True, blank=True)
-    mfa_enabled = models.BooleanField(default=False)
-    mfa_secret = models.CharField(max_length=255, blank=True)
+    last_login_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
     class Meta:
-        db_table = "iam_users"
-        verbose_name = "User"
-        verbose_name_plural = "Users"
+        db_table = "iam_user_accounts"
+        verbose_name = "User Account"
+        verbose_name_plural = "User Accounts"
+        unique_together = ("tenant_id", "email")
+        indexes = [
+            models.Index(fields=["tenant_id", "email"]),
+            models.Index(fields=["tenant_id", "status"]),
+        ]
 
     def __str__(self) -> str:
-        return self.email
+        return f"{self.email} ({self.tenant_id})"
+
+    def set_password(self, raw_password: str) -> None:
+        """Hash and set password using Django's hasher (bcrypt default)."""
+        self.password_hash = make_password(raw_password)
+
+    def check_password(self, raw_password: str) -> bool:
+        """Verify password against stored hash."""
+        from django.contrib.auth.hashers import check_password
+        return check_password(raw_password, self.password_hash)
 
 
-class Session(models.Model):
+class SecurityEvent(models.Model):
     """
-    User session model for tracking active sessions.
+    Security telemetry event (non-audit, for detection/alerting).
+
+    Per DB Design §4.2: security_event captures login failures, lockouts, etc.
+    Per Security §11.3: Separate security telemetry from audit.
     """
 
-    id = models.CharField(primary_key=True, max_length=36, default=new_id_str)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sessions")
-    tenant_id = models.CharField(max_length=36, db_index=True)
-    device_type = models.CharField(max_length=20)  # web, mobile, pos
-    refresh_token_jti = models.CharField(max_length=36, unique=True)
-    ip_address = models.GenericIPAddressField()
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    tenant_id = models.UUIDField(db_index=True)
+    user_id = models.UUIDField(null=True, blank=True)
+    event_type = models.CharField(max_length=100, db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)
-    last_activity =models.DateTimeField(auto_now=True)
-    expires_at = models.DateTimeField()
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    request_id = models.CharField(max_length=36, blank=True)
+    details = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
-        db_table = "iam_sessions"
+        db_table = "iam_security_events"
+        verbose_name = "Security Event"
+        verbose_name_plural = "Security Events"
         indexes = [
-            models.Index(fields=["user", "device_type", "is_active"]),
-            models.Index(fields=["refresh_token_jti"]),
+            models.Index(fields=["tenant_id", "created_at"]),
+            models.Index(fields=["event_type", "created_at"]),
         ]
 
 
 class PasswordResetToken(models.Model):
     """
-    Password reset token model.
+    Single-use password reset token.
+
+    Per Security §3.6: Single-use reset tokens with short TTL (15 minutes).
+    Per Security §6.5: Tokens are hashed (not stored in plaintext).
     """
 
-    id = models.CharField(primary_key=True, max_length=36, default=new_id_str)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="password_reset_tokens")
-    token = models.CharField(max_length=100, unique=True, db_index=True)
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    user = models.ForeignKey(
+        UserAccount, on_delete=models.CASCADE, related_name="password_reset_tokens"
+    )
+    tenant_id = models.UUIDField(db_index=True)
+    token_hash = models.CharField(max_length=255, db_index=True)
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "iam_password_reset_tokens"
+        verbose_name = "Password Reset Token"
+        verbose_name_plural = "Password Reset Tokens"
+        indexes = [
+            models.Index(fields=["token_hash"]),
+            models.Index(fields=["user", "used_at"]),
+        ]

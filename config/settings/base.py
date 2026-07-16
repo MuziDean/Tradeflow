@@ -149,7 +149,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Password validation
 # ------------------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -179,7 +179,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 # ------------------------------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "core.auth.jwt.TenantAwareJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -222,6 +222,8 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
     "JTI_CLAIM": "jti",
     "TOKEN_TYPE_CLAIM": "token_type",
+    "TENANT_ID_CLAIM": "tid",
+    "SESSION_ID_CLAIM": "sid",
 }
 
 # ------------------------------------------------------------------
