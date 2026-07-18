@@ -481,6 +481,13 @@ class FiscalYearRepository:
 class NumberSequenceRepository:
     """Repository for NumberSequence with atomic generation."""
 
+    def get_by_id(self, sequence_id: str, tenant_id: str) -> NumberSequence | None:
+        try:
+            model = NumberSequenceModel.objects.get(id=sequence_id, tenant_id=tenant_id)
+            return self._to_entity(model)
+        except NumberSequenceModel.DoesNotExist:
+            return None
+
     def get_by_name(self, tenant_id: str, name: str) -> NumberSequence | None:
         try:
             model = NumberSequenceModel.objects.get(tenant_id=tenant_id, name=name)
@@ -500,6 +507,21 @@ class NumberSequenceRepository:
             reset_policy=seq.reset_policy,
         )
         model.save()
+        return self._to_entity(model)
+
+    def create_or_update(self, seq: NumberSequence) -> NumberSequence:
+        model, _ = NumberSequenceModel.objects.update_or_create(
+            id=seq.id,
+            tenant_id=seq.tenant_id,
+            defaults={
+                "name": seq.name,
+                "prefix": seq.prefix,
+                "suffix": seq.suffix,
+                "current_number": seq.current_number,
+                "padding_length": seq.padding_length,
+                "reset_policy": seq.reset_policy,
+            },
+        )
         return self._to_entity(model)
 
     @transaction.atomic
