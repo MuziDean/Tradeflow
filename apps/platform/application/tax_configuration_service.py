@@ -4,6 +4,7 @@ Application service for TaxConfiguration with immutable history.
 No domain events emitted (versioned records preserve history implicitly).
 """
 
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -11,6 +12,8 @@ from django.db import transaction
 
 from apps.platform.domain.entities import TaxConfiguration
 from apps.platform.infrastructure.repositories import TaxConfigurationRepository
+
+logger = logging.getLogger("tradeflow.platform")
 
 
 class TaxConfigurationService:
@@ -30,7 +33,11 @@ class TaxConfigurationService:
     def create_tax_config(self, tax: TaxConfiguration) -> TaxConfiguration:
         """Create new tax config. Never overwrites history."""
         with transaction.atomic():
-            return self.tax_repository.create(tax)
+            created = self.tax_repository.create(tax)
+            logger.info(
+                "Tax configuration created: %s (tenant=%s)", created.id, created.tenant_id
+            )
+            return created
 
     def update_tax_config(self, tax: TaxConfiguration) -> TaxConfiguration:
         """Update creates new version (new record) to preserve history."""

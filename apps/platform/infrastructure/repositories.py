@@ -5,9 +5,6 @@ Tenant-scoped queries for organization entities.
 Currency repository is global (no tenant_id).
 """
 
-from uuid import UUID
-
-from django.core.cache import cache
 from django.db import transaction
 
 from apps.platform.domain.entities import (
@@ -23,31 +20,16 @@ from apps.platform.domain.entities import (
 )
 from apps.platform.infrastructure.models import (
     Branch as BranchModel,
-)
-from apps.platform.infrastructure.models import (
     BusinessPreferences as BusinessPreferencesModel,
-)
-from apps.platform.infrastructure.models import (
     Company as CompanyModel,
-)
-from apps.platform.infrastructure.models import (
     Currency as CurrencyModel,
-)
-from apps.platform.infrastructure.models import (
     FiscalYear as FiscalYearModel,
-)
-from apps.platform.infrastructure.models import (
     NumberSequence as NumberSequenceModel,
-)
-from apps.platform.infrastructure.models import (
     StoredFile as StoredFileModel,
-)
-from apps.platform.infrastructure.models import (
     TaxConfiguration as TaxConfigurationModel,
-)
-from apps.platform.infrastructure.models import (
     Warehouse as WarehouseModel,
 )
+from shared.types.enums import WarehouseType
 
 
 class CompanyRepository:

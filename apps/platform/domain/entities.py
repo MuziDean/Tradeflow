@@ -10,7 +10,11 @@ from typing import Optional
 
 from shared.ids.uuid import new_id_str
 from shared.time.helpers import now
-from shared.types.enums import WarehouseType
+from shared.types.enums import (
+    FiscalYearStatus,
+    NumberSequenceResetPolicy,
+    WarehouseType,
+)
 
 
 @dataclass
@@ -144,15 +148,6 @@ class Currency:
 
 
 @dataclass
-class TaxCategory:
-    """Tax category enum values."""
-    STANDARD = "standard"
-    REDUCED = "reduced"
-    ZERO = "zero"
-    EXEMPT = "exempt"
-
-
-@dataclass
 class TaxConfiguration:
     """
     Tax rate configuration.
@@ -175,14 +170,6 @@ class TaxConfiguration:
 
 
 @dataclass
-class FiscalYearStatus:
-    """Fiscal year status enum."""
-    OPEN = "open"
-    CLOSED = "closed"
-    ARCHIVED = "archived"
-
-
-@dataclass
 class FiscalYear:
     """
     Accounting fiscal period.
@@ -197,15 +184,6 @@ class FiscalYear:
     is_active: bool = True
     created_at: datetime = field(default_factory=now)
     updated_at: datetime = field(default_factory=now)
-
-
-@dataclass
-class NumberSequenceResetPolicy:
-    """Number sequence reset behavior."""
-    NEVER = "never"
-    YEARLY = "yearly"
-    MONTHLY = "monthly"
-    DAILY = "daily"
 
 
 @dataclass

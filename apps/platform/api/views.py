@@ -42,11 +42,8 @@ from apps.platform.api.serializers import (
     NumberSequenceCreateSerializer,
     NumberSequenceDetailSerializer,
     NumberSequenceListSerializer,
-    NumberSequenceNextNumberSerializer,
-    NumberSequenceResetSerializer,
     StoredFileCreateSerializer,
     StoredFileListSerializer,
-    StoredFileQuerySerializer,
     TaxConfigurationCreateSerializer,
     TaxConfigurationDetailSerializer,
     TaxConfigurationListSerializer,
@@ -101,10 +98,21 @@ from apps.platform.infrastructure.repositories import (
     TaxConfigurationRepository,
     WarehouseRepository,
 )
-from apps.rbac.core.permissions.base import HasPermission
 from core.pagination import StandardPagination
 
 logger = logging.getLogger("tradeflow.platform")
+
+
+def _error_response(
+    message: str,
+    code: str = "ERROR",
+    status_code: int = status.HTTP_400_BAD_REQUEST,
+) -> Response:
+    """Standard error response using the API envelope format."""
+    return Response(
+        {"success": False, "error": {"code": code, "message": message}},
+        status=status_code,
+    )
 
 
 # ──────────────────────────────────────────────
@@ -130,15 +138,17 @@ class TenantInfoView(APIView):
     def get(self, request):
         tenant_id = request.actor.tenant_id
         if not tenant_id:
-            return Response(
-                {"error": "Tenant context not available."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return _error_response(
+                "Tenant context not available.",
+                code="TENANT_CONTEXT_MISSING",
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
         tenant = Tenant.objects.filter(id=tenant_id).first()
         if not tenant:
-            return Response(
-                {"error": "Tenant not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return _error_response(
+                "Tenant not found.",
+                code="TENANT_NOT_FOUND",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
         serializer = TenantSerializer(tenant)
         return Response({"data": serializer.data})
@@ -167,9 +177,10 @@ class CompanyProfileView(APIView):
         service = self.get_service()
         company = service.get_company(tenant_id)
         if not company:
-            return Response(
-                {"error": "Company not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return _error_response(
+                "Company not found.",
+                code="COMPANY_NOT_FOUND",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
         serializer = CompanyProfileSerializer(company)
         return Response({"data": serializer.data})
@@ -182,9 +193,10 @@ class CompanyProfileView(APIView):
         service = self.get_service()
         existing = service.get_company(tenant_id)
         if not existing:
-            return Response(
-                {"error": "Company not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return _error_response(
+                "Company not found.",
+                code="COMPANY_NOT_FOUND",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         # Map validated data back to domain entity
@@ -226,10 +238,7 @@ class BusinessPreferencesView(APIView):
         service = self.get_service()
         prefs = service.get_preferences(tenant_id)
         if not prefs:
-            return Response(
-                {"data": None},
-                status=status.HTTP_200_OK,
-            )
+            return Response({"data": None}, status=status.HTTP_200_OK)
         serializer = BusinessPreferencesSerializer(prefs)
         return Response({"data": serializer.data})
 
@@ -820,9 +829,10 @@ class FiscalYearCloseView(APIView):
         service = FiscalYearService(fiscal_year_repository=FiscalYearRepository())
         closed = service.close_fiscal_year(pk, tenant_id)
         if not closed:
-            return Response(
-                {"error": "Fiscal year not found or already closed."},
-                status=status.HTTP_404_NOT_FOUND,
+            return _error_response(
+                "Fiscal year not found or already closed.",
+                code="FISCAL_YEAR_NOT_FOUND",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
         return Response(
             {"data": FiscalYearDetailSerializer(closed).data},
@@ -934,9 +944,10 @@ class NumberSequenceNextView(APIView):
         # Get the sequence to find its name
         seq = NumberSequenceRepository().get_by_id(pk, tenant_id)
         if not seq:
-            return Response(
-                {"error": "Number sequence not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return _error_response(
+                "Number sequence not found.",
+                code="SEQUENCE_NOT_FOUND",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         formatted = service.get_next_number(tenant_id, seq.name)
@@ -964,9 +975,10 @@ class NumberSequenceResetView(APIView):
 
         seq = NumberSequenceRepository().get_by_id(pk, tenant_id)
         if not seq:
-            return Response(
-                {"error": "Number sequence not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return _error_response(
+                "Number sequence not found.",
+                code="SEQUENCE_NOT_FOUND",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         success = service.reset_sequence(tenant_id, seq.name)

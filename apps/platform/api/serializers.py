@@ -19,13 +19,7 @@ from apps.platform.infrastructure.models import (
     Tenant,
     Warehouse,
 )
-from shared.types.enums import (
-    FiscalYearStatus,
-    NumberSequenceResetPolicy,
-    TaxCategory,
-    TaxType,
-    WarehouseType,
-)
+from shared.types.enums import TaxCategory, TaxType
 
 
 # ──────────────────────────────────────────────
@@ -509,18 +503,6 @@ class NumberSequenceCreateSerializer(serializers.ModelSerializer):
         ]
 
 
-class NumberSequenceNextNumberSerializer(serializers.Serializer):
-    """Response serializer for get_next_number."""
-
-    formatted_number = serializers.CharField()
-
-
-class NumberSequenceResetSerializer(serializers.Serializer):
-    """Response serializer for sequence reset."""
-
-    success = serializers.BooleanField()
-
-
 # ──────────────────────────────────────────────
 # Stored File
 # ──────────────────────────────────────────────
@@ -563,8 +545,5 @@ class StoredFileCreateSerializer(serializers.ModelSerializer):
         ]
 
 
-class StoredFileQuerySerializer(serializers.Serializer):
-    """Query parameter serializer for filtering stored files."""
 
-    entity_type = serializers.CharField(required=True)
-    entity_id = serializers.CharField(required=True)
+

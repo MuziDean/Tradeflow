@@ -183,6 +183,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
+        "apps.rbac.core.permissions.base.HasPermission",
     ),
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardPagination",
     "PAGE_SIZE": 50,

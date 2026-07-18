@@ -4,12 +4,15 @@ Application service for BusinessPreferences.
 No domain events emitted (no state changes that require notification).
 """
 
+import logging
 from typing import Optional
 
 from django.db import transaction
 
 from apps.platform.domain.entities import BusinessPreferences
 from apps.platform.infrastructure.repositories import BusinessPreferencesRepository
+
+logger = logging.getLogger("tradeflow.platform")
 
 
 class BusinessPreferencesService:
@@ -23,4 +26,8 @@ class BusinessPreferencesService:
 
     def update_preferences(self, prefs: BusinessPreferences) -> BusinessPreferences:
         with transaction.atomic():
-            return self.prefs_repository.create_or_update(prefs)
+            updated = self.prefs_repository.create_or_update(prefs)
+            logger.info(
+                "Business preferences updated (tenant=%s)", updated.tenant_id
+            )
+            return updated
