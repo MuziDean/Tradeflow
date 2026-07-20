@@ -11,4 +11,7 @@ urlpatterns = [
     path("api/v1/auth/", include("apps.iam.api.urls")),
     path("api/v1/rbac/", include("apps.rbac.api.urls")),
     path("api/v1/company/", include("apps.platform.api.urls")),
+    path("api/v1/retail/", include("apps.retail.api.urls")),
+    path("api/v1/inventory/", include("apps.inventory.api.urls")),
+    path("api/v1/purchasing/", include("apps.purchasing.api.urls")),
 ]

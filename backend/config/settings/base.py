@@ -80,7 +80,7 @@ RETAIL_APPS = [
     # "apps.suppliers",  # Phase 1+
     # "apps.purchasing",  # Phase 1+
     # "apps.warehouse_ops",  # Phase 1+
-    # "apps.inventory",  # Phase 1+
+    "apps.inventory",  # Milestone 5 Step 1
     # "apps.sales_pos",  # Phase 1+
     "apps.retail",  # Phase 0 scaffold
 ]

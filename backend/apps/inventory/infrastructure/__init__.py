@@ -1,0 +1,1 @@
+"""Infrastructure (persistence) layer for the inventory module."""
